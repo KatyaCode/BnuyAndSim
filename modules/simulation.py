@@ -23,14 +23,20 @@ class Simulation:
             self.targets = [Target("Target {}".format(i+1)) for i in range(self.num_targets)]
             simulated_time = Decimal(0)
             self.character.begin_combat()
-            actions = self.character.act(self.targets)
-            if actions:
-                self.logger.log(simulated_time, actions, event_level="action")
+            character_actions = self.character.act(self.targets)
+            if character_actions:
+                self.logger.log(simulated_time, character_actions, event_level="action")
             while simulated_time + self.time_step < self.simulation_time:
                 simulated_time += self.time_step  # increment simulated time
-                updates = self.character.update(self.time_step)
-                if updates:
-                    self.logger.log(simulated_time, updates, event_level="all")
+                character_updates = self.character.update(self.time_step)
+                if character_updates:
+                    self.logger.log(simulated_time, character_updates, event_level="all")
+                targets_updates = []
+                for target in self.targets:
+                    targets_updates.append(target.update(self.time_step))
+                if targets_updates:
+                    for target_update in targets_updates:
+                        self.logger.log(simulated_time, f"{target.name}, status durations: {target_update}", event_level="all")
                 actions = self.character.act(self.targets)
                 if actions:
                     self.logger.log(simulated_time, actions, event_level="action")

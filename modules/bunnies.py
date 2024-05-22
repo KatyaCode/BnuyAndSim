@@ -1,7 +1,9 @@
 from decimal import Decimal
 
-from .effects import (ReduceCooldownOnUse, StartOnCooldown, RestoreUseOnUse, UsesActionCounter, ResetCooldownOnUse,
-                      IncrementsActionCounter, UsedAutomatically, ChargesAbilityOnUse, ModifyDamage)
+from .effects import (ReduceCooldownOnUse, StartOnCooldown, RestoreUseOnUse, UsesActionCounter, HitsMultipliedByUses, CannotBeReset, CannotBeRestored, AdditionalHitsOnDebuff,
+                      ResetCooldownOnUse, IncrementsActionCounter, UsedAutomatically, ChargesAbilityOnUse, MultiplyDamage, ChargesAbilityOnHit,
+                      AppliesDebuffOnHit, AppliesBuffOnUse)
+from . import statuses
 from .action import Action
 
 bunny_classes = {
@@ -27,17 +29,17 @@ bunny_classes = {
             "defensive": Action("Protect Command", "defensive", damage=0, cooldown=Decimal(10), gcd=Decimal(0), num_hits=0, effects=[RestoreUseOnUse("secondary", 1)])
         },
         "priority": [
-            ("special", lambda character: True),
+            ("special", lambda character, targets: True),
             ("defensive",
-             lambda character: character.actions['secondary'].current_uses == 0),
-            ("secondary", lambda character:
+             lambda character, targets: character.actions['secondary'].current_uses == 0),
+            ("secondary", lambda character, targets:
                 character.actions['special'].current_cooldown >= (8 if character.selected_upgrades.get('special') == 'ruby'
                                                                   else (6 if character.selected_upgrades.get('special') == 'opal'
                                                                         else 4
                                                                         )
                                                                   ) or character.actions['special'].uses_counter()
              ),
-            ("primary", lambda character: True)
+            ("primary", lambda character, targets: True)
         ],
         "upgrades": {
             "primary": {
@@ -161,7 +163,7 @@ bunny_classes = {
                 },
                 "ruby": {
                     "defensive": {
-                        "effects": [ModifyDamage("ALL", Decimal(0.2))]
+                        "effects": [MultiplyDamage("ALL", Decimal('0.2'))]
                     }
                 },
                 "garnet": {
@@ -181,16 +183,22 @@ bunny_classes = {
         "name": "Sniper Bunny",
         "actions": {
             "primary": Action("Arrowshot", "primary", damage=200, cooldown=Decimal(0), gcd=Decimal('1.5'), num_hits=1),
-            # TODO Snare
-            "secondary": Action("Rabbitsnare", "secondary", damage=100, cooldown=Decimal(0), gcd=Decimal('1.2'), num_hits=1),
+            "secondary": Action("Rabbitsnare", "secondary", damage=100, cooldown=Decimal(0), gcd=Decimal('1.2'), num_hits=1,
+                                effects=[AppliesDebuffOnHit("Rabbitsnare Debuff", statuses.RabbitSnare, {"damage": 150, "duration": 5})]),
             "special": Action("Barrage", "special", damage=90, cooldown=Decimal(10), gcd=Decimal('1.2'), num_hits=3, max_uses=3),
-            "defensive": Action("Careful Aim", "defensive", damage=0, cooldown=Decimal(10), gcd=Decimal(0), num_hits=0, effects=[ChargesAbilityOnUse("primary", 1, 2, 1)])
+            "defensive": Action("Careful Aim", "defensive", damage=0, cooldown=Decimal(10), gcd=Decimal(0), num_hits=0,
+                                effects=[ChargesAbilityOnUse("primary", 1, 2, 1)])
         },
         "priority": [
-            ("special", lambda character: True),
-            ("defensive", lambda character: True),
-            ("primary", lambda character: True),
-            ("secondary", lambda character: True)
+            ("secondary", lambda character, targets: all(not isinstance(
+                status, statuses.RabbitSnare) for target in targets for status in target.statuses)),
+            ("special", lambda character, targets: all(not isinstance(
+                effect, HitsMultipliedByUses) for effect in character.actions["special"].effects)),
+            ("special", lambda character,
+             targets: character.actions["special"].current_uses == character.actions["special"].max_uses),
+            ("defensive", lambda character, targets: True),
+            ("primary", lambda character, targets: True),
+            ("secondary", lambda character, targets: True)
         ],
         "upgrades": {
             "primary": {
@@ -226,12 +234,13 @@ bunny_classes = {
             "secondary": {
                 "opal": {
                     "secondary": {
-                        "effects": []  # TODO Buffed Snare
+                        "effects": [AppliesDebuffOnHit("Rabbitsnare Debuff", statuses.RabbitSnare, {"damage": 350, "duration": 5})]
                     }
                 },
                 "sapphire": {
                     "secondary": {
-                        "damage": 70
+                        "damage": 70,
+                        "effects_extend": [AdditionalHitsOnDebuff(3)]
                     }
                 },
                 "ruby": {
@@ -244,13 +253,13 @@ bunny_classes = {
                 "garnet": {
                     "secondary": {
                         "damage": 0,
-                        "gcd": Decimal(0.6),
-                        "effects": [RestoreUseOnUse("special", amount=1), ChargesAbilityOnUse("special", charge_amount=1, charge_level=2)]
+                        "gcd": Decimal('0.6'),
+                        "effects": [RestoreUseOnUse("special", amount=1), ChargesAbilityOnUse("special", charge_amount=1, charge_level=Decimal(2))]
                     }
                 },
                 "emerald": {
                     "secondary": {
-                        "effects": []  # TODO Tri-snare
+                        "effects": [AppliesDebuffOnHit("Rabbitsnare Debuff", statuses.TriSnare, {"damage": 150, "duration": Decimal(8)})]
                     }
                 }
             },
@@ -261,7 +270,7 @@ bunny_classes = {
                         "cooldown": Decimal(20),
                         "max_uses": 6,
                         "uses_per_cd": 6,
-                        "effects": []  # TODO Cannot be reset
+                        "effects": [CannotBeReset(), CannotBeRestored()]
                     }
                 },
                 "sapphire": {
@@ -282,14 +291,14 @@ bunny_classes = {
                 "garnet": {
                     "special": {
                         "damage": 110,
-                        "effects": []  # TODO Charges Ability On Hit
+                        "effects": [ChargesAbilityOnHit("primary", charge_level=Decimal(3), probability=Decimal('0.1'))]
                     }
                 },
                 "emerald": {
                     "special": {
                         "damage": 110,
                         "gcd": Decimal(1.8),
-                        "effects": []  # TODO Uses All Uses Per Use, Number of Hits Multiplied by Uses
+                        "effects": [HitsMultipliedByUses()]
                     }
                 }
             },
@@ -297,29 +306,29 @@ bunny_classes = {
                 "opal": {
                     "defensive": {
                         "cooldown": Decimal(15),
-                        "effects": []  # TODO All Damage Increased
+                        "effects": [MultiplyDamage("ALL", Decimal('0.3'))]
                     }
                 },
                 "sapphire": {
                     "defensive": {
-                        "effects_extend": []  # TODO Gives Vanish
+                        "effects_extend": [AppliesBuffOnUse("defensive", statuses.Vanish, {'duration': Decimal(3)})]
                     }
                 },
                 "ruby": {
                     "defensive": {
                         "cooldown": Decimal(15),
-                        "effects": [ChargesAbilityOnUse("primary", charge_amount=1, charge_level=3)]
+                        "effects": [ChargesAbilityOnUse("primary", charge_amount=1, charge_level=Decimal(3))]
                     }
                 },
                 "garnet": {
                     "defensive": {
-                        "effects_extend": [ChargesAbilityOnUse("secondary", charge_amount=1, charge_level=2)]
+                        "effects_extend": [ChargesAbilityOnUse("secondary", charge_amount=1, charge_level=Decimal(2))]
                     }
                 },
                 "emerald": {
                     "defensive": {
                         "cooldown": Decimal(15),
-                        "effects_extend": []  # TODO Gives Tranquility
+                        "effects_extend": [AppliesBuffOnUse("defensive", statuses.Tranquility, {'duration': Decimal(8)})]
                     }
                 }
             }
