@@ -12,22 +12,21 @@ class Status():
 
     def update(self, time_step):
         raise NotImplementedError("Implement this in a subclass")
-
-
-class Vanish(Status):
+    
+    
+class Buff(Status):
     def __init__(self, applied_by, source, duration, applied_to):
         super().__init__(applied_by, source, duration, applied_to)
-        self.effects = [effects.MultiplyDamage("ALL", Decimal('0.3'))]
-
+        
     def __str__(self):
-        return "Vanish"
+        raise NotImplementedError("Implement this in a subclass")
     
     def is_stackable(self):
         return False
-
+    
     def consumed_by_ability(self):
-        return True
-
+        return False
+    
     def update(self, time_step):
         self.duration -= time_step
         if self.duration <= 0:
@@ -35,7 +34,19 @@ class Vanish(Status):
         return self.duration
 
 
-class Tranquility(Status):
+class Vanish(Buff):
+    def __init__(self, applied_by, source, duration, applied_to):
+        super().__init__(applied_by, source, duration, applied_to)
+        self.effects = [effects.MultiplyDamage("ALL", Decimal('0.3'))]
+
+    def __str__(self):
+        return "Vanish"
+
+    def consumed_by_ability(self):
+        return True
+
+
+class Tranquility(Buff):
     def __init__(self, applied_by, source, duration, applied_to):
         super().__init__(applied_by, source, duration, applied_to)
         self.effects = [effects.MultiplyDamage("ALL", Decimal('0.3'))]
@@ -43,17 +54,35 @@ class Tranquility(Status):
     def __str__(self):
         return "Tranquility"
     
+    
+class Warcry(Buff):
+    def __init__(self, applied_by, source, duration, applied_to):
+        super().__init__(applied_by, source, duration, applied_to)
+        self.effects = [effects.MultiplyDamage("ALL", Decimal('0.2'))]
+
+    def __str__(self):
+        return "Warcry"
+    
+    
+class RabbitLuck(Buff):
+    def __init__(self, applied_by, source, duration, applied_to):
+        super().__init__(applied_by, source, duration, applied_to)
+        self.effects = [effects.IncreaseLuck(Decimal(1)), effects.GauranteeProcs()]
+        
+    def __str__(self):
+        return "Rabbitluck"
+    
+    
+class Haste(Buff):
+    def __init__(self, applied_by, source, duration, applied_to):
+        super().__init__(applied_by, source, duration, applied_to)
+        self.effects = [effects.MultiplyGCD(Decimal('0.8'))]
+                        
+    def __str__(self):
+        return "Haste"
+        
     def is_stackable(self):
-        return False
-
-    def consumed_by_ability(self):
-        return False
-
-    def update(self, time_step):
-        self.duration -= time_step
-        if self.duration <= 0:
-            return False
-        return self.duration
+        return True
 
 
 class DamageOverTime(Status):
@@ -72,7 +101,23 @@ class DamageOverTime(Status):
     def tick(self):
         self.applied_to.receive_effect_damage(
             self.damage, "dot", self.applied_by, self.source)
+        
+        
+class Burn(Status):
+    def __init__(self, applied_by, source, duration, applied_to, damage):
+        super().__init__(applied_by, source, duration, applied_to)
+        self.damage = damage
 
+    def update(self, time_step):
+        self.duration -= time_step
+        if self.duration <= 0:
+            self.activate()
+            return False
+        return self.duration
+    
+    def activate(self):
+        self.applied_to.receive_effect_damage(
+            self.damage, "burn", self.applied_by, self.source)
 
 class RabbitSnare(Status):
     def __init__(self, applied_by, source, duration, applied_to, damage):
