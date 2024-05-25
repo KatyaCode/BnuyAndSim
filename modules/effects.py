@@ -3,6 +3,9 @@ import copy
 from decimal import Decimal
 
 from . import statuses
+from .combat_logger import CombatLogger
+
+combat_logger = CombatLogger.get_instance()
 
 
 def random_proc(probability, character):
@@ -106,7 +109,7 @@ class MultiplyDamage(Effect):
         if affected_sources == "ALL":
             self.affected_sources = [
                 "primary", "secondary", "special", "defensive", "loot", "debuff", "dot", "trigger"]
-        elif affected_sources.istype(list):
+        elif isinstance(affected_sources, list):
             self.affected_sources = affected_sources
         else:
             raise TypeError("affected_sources must be a list or 'ALL'")
@@ -139,6 +142,9 @@ class CooldownResetByUse(TriggerableEffect):
 
     def trigger(self, character, _):
         if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} reset the cooldown of {self.name}", "proc")
             character.actions[self.name].reset_cooldown()
             
             
@@ -152,6 +158,9 @@ class DealsDamageOnUse(TriggerableEffect):
 
     def trigger(self, character, targets):
         if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} {self.damage_source} deals {self.damage}", "proc")
             for target in targets:
                 target.receive_effect_damage(self.damage, self.damage_type, character, self.damage_source)
 
@@ -175,6 +184,9 @@ class RestoreUseOnUse(TriggerableEffect):
 
     def trigger(self, character, _):
         if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} restored {self.amount} uses of {self.action_name}", "proc")
             character.actions[self.action_name].restore_uses(self.amount)
 
 
@@ -186,6 +198,9 @@ class ResetCooldownOnUse(TriggerableEffect):
 
     def trigger(self, character, _):
         if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} reset the cooldown of {self.action_name}", "proc")
             character.actions[self.action_name].reset_cooldown()
 
 
@@ -220,22 +235,48 @@ class ChargesAbilityOnUse(TriggerableEffect):
                 self.uses_counter = 0 # Reset the counter
             character.actions[self.action_name].add_charges(
                 self.charge_level, self.charge_amount, self.max_charges)
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} charged {self.action_name} with {self.charge_amount} charges", "proc")
             return True
         return False
-
-
-class AppliesBuffOnUse(TriggerableEffect):
-    def __init__(self, source, buff, buff_args, probability=1):
-        self.source = source
-        self.buff = buff
-        self.buff_args = buff_args
+    
+    
+class ChargesAndResetsAbilityOnUse(TriggerableEffect):
+    def __init__(self, action_name, charge_amount=1, charge_level=Decimal('1.5'), max_charges=1, probability=1):
+        self.action_name = action_name
+        self.charge_amount = charge_amount
+        self.charge_level = charge_level
+        self.max_charges = max_charges
         self.probability = probability
         self.effect_type = 'ON_USE'
 
     def trigger(self, character, _):
         if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} charged and reset {self.action_name} with {self.charge_amount} charges", "proc")
+            character.actions[self.action_name].add_charges(
+                self.charge_level, self.charge_amount, self.max_charges)
+            character.actions[self.action_name].reset_cooldown()
+
+
+class AppliesBuffOnUse(TriggerableEffect):
+    def __init__(self, source, buff, buff_args, probability=1, replace=False):
+        self.source = source
+        self.buff = buff
+        self.buff_args = buff_args
+        self.probability = probability
+        self.replace = replace
+        self.effect_type = 'ON_USE'
+
+    def trigger(self, character, _):
+        if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} applied {self.buff.__name__} to themselves", "proc")
             character.add_status(self.buff(
-                applied_by=character, source=self.source, applied_to=character, **self.buff_args))
+                applied_by=character, source=self.source, applied_to=character, **self.buff_args), self.replace)
 
 
 class ChargesAbilityOnHit(TriggerableEffect):
@@ -249,6 +290,9 @@ class ChargesAbilityOnHit(TriggerableEffect):
 
     def trigger(self, character, _):
         if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} charged {self.action_name} with {self.charge_amount} charges", "proc")
             character.actions[self.action_name].add_charges(
                 self.charge_level, self.charge_amount, self.max_charges)
 
@@ -263,6 +307,9 @@ class AppliesDebuffOnHit(TriggerableEffect):
 
     def trigger(self, character, target, damage_dealt):
         if random_proc(self.probability, character):
+            if self.probability < 1:
+                combat_logger.log(
+                    f"PROC: {character.name} applied {self.debuff.__name__} to {target.name}", "proc")
             debuff_args = copy.deepcopy(self.debuff_args)
             if self.debuff is statuses.Burn:
                 debuff_args['damage'] = damage_dealt

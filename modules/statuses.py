@@ -85,6 +85,24 @@ class Haste(Buff):
         return True
 
 
+class BuffingField(Buff):
+    def __init__(self, applied_by, source, duration, applied_to, buff):
+        super().__init__(applied_by, source, duration, applied_to)
+        self.effects = []
+        self.buff = buff
+        applied_by.add_status(buff(applied_by, source, Decimal(1), applied_to), replace=True)
+
+    def __str__(self):
+        return "Buffing Field"
+    
+    def update(self, time_step):
+        self.duration -= time_step
+        self.applied_by.add_status(self.buff(self.applied_by, self.source, Decimal(1), self.applied_to), replace=True)
+        if self.duration <= 0:
+            return False
+        return self.duration
+
+
 class DamageOverTime(Status):
     def __init__(self, applied_by, source, duration, applied_to, damage):
         super().__init__(applied_by, source, duration, applied_to, damage)

@@ -2,6 +2,9 @@ from decimal import Decimal
 import copy
 
 from . import effects
+from .combat_logger import CombatLogger
+
+combat_logger = CombatLogger.get_instance()
 
 
 class Character:
@@ -44,21 +47,18 @@ class Character:
         return action.name
 
     def act(self, targets):
-        actions = []
         for action_name in self.actions:
             action = self.actions[action_name]
             if action.is_available() and action.is_automatic():
+                combat_logger.log(f"{self.name} is automatically performing {action.name}", event_level="action")
                 self.perform_action(action_name, targets)
-                actions.append(action.name)
         for action_name, condition in self.bunny_class["priority"]:
             if action_name == "defensive" and not self.use_defensive:
                 continue
             if self.actions[action_name].is_available() and not self.actions[action_name].is_automatic() and condition(self, targets):
+                combat_logger.log(f"{self.name} is performing {self.actions[action_name].name}", event_level="action")
                 self.perform_action(action_name, targets)
-                actions.append(self.actions[action_name].name)
                 break
-        if actions:
-            return actions
 
     def update(self, time_step):
         current_cooldowns = {}
@@ -73,23 +73,29 @@ class Character:
             else:
                 action.update(time_step)
                 current_cooldowns[action.action_type] = f"Available Uses {action.current_uses} Cooldown: {action.current_cooldown}"
-        for status in self.statuses:
+        for status in self.statuses.copy():
             remaining_duration = status.update(time_step)
             if not remaining_duration:
                 self.statuses.remove(status)
             else:
                 current_buffs[str(status)] = remaining_duration
-        return f"{self.name} status: {current_cooldowns}, {current_buffs}, GCD: {self.global_cooldown}"
+        combat_logger.log(f"{self.name} status: {current_cooldowns}, {current_buffs}, GCD: {self.global_cooldown}", event_level="all")
     
-    def add_status(self, status):
+    def add_status(self, status, replace=False):
         if status.is_stackable():
             for existing_status in self.statuses:
                 if type(existing_status) == type(status) and existing_status.source == status.source:
-                    return
+                    if replace:
+                        self.statuses.remove(existing_status)
+                    else:
+                        return
         else:
             for existing_status in self.statuses:
                 if type(existing_status) == type(status):
-                    return
+                    if replace:
+                        self.statuses.remove(existing_status)
+                    else:
+                        return
         self.statuses.append(status)
         
     def trigger_on_proc_effects(self):

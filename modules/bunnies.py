@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from .effects import (ReduceCooldownOnUse, StartOnCooldown, RestoreUseOnUse, UsesActionCounter, HitsMultipliedByUses, CannotBeReset, CannotBeRestored, AdditionalHitsOnDebuff,
                       ResetCooldownOnUse, IncrementsActionCounter, UsedAutomatically, ChargesAbilityOnUse, MultiplyDamage, ChargesAbilityOnHit, CooldownResetByUse,
-                      AppliesDebuffOnHit, AppliesBuffOnUse, DoesNotResetActions, DealsDamageOnUse, ConsumesAllUses, RandomAdditionalHits)
+                      AppliesDebuffOnHit, AppliesBuffOnUse, DoesNotResetActions, DealsDamageOnUse, ConsumesAllUses, RandomAdditionalHits, ChargesAndResetsAbilityOnUse)
 from . import statuses
 from .action import Action
 
@@ -11,20 +11,21 @@ bunny_classes = {
         "name": "Ancient Bunny",
         "actions": {
             "primary": Action("Strike Command", "primary", base_damage=70, base_cooldown=Decimal(0), base_gcd=Decimal('1.2'), num_hits=2),
-            "secondary": Action("March Command", "secondary", base_damage=240, base_cooldown=Decimal(6), base_gcd=Decimal('1.2'), num_hits=1, max_uses=2, effects=[ReduceCooldownOnUse("special", 4)]),
-            "special": Action("Abyssal Call", "special", base_damage=180, base_cooldown=Decimal(20), base_gcd=Decimal('1.2'), num_hits=4, effects=[StartOnCooldown("special")]),
-            "defensive": Action("Protect Command", "defensive", base_damage=0, base_cooldown=Decimal(10), base_gcd=Decimal(0), num_hits=0, effects=[RestoreUseOnUse("secondary", 1)])
+            "secondary": Action("March Command", "secondary", base_damage=240, base_cooldown=Decimal(6), base_gcd=Decimal('1.2'), num_hits=1, max_uses=2,
+                                effects=[ReduceCooldownOnUse("special", 4)]),
+            "special": Action("Abyssal Call", "special", base_damage=180, base_cooldown=Decimal(20), base_gcd=Decimal('1.2'), num_hits=4,
+                              effects=[StartOnCooldown("special")]),
+            "defensive": Action("Protect Command", "defensive", base_damage=0, base_cooldown=Decimal(10), base_gcd=Decimal(0), num_hits=0,
+                                effects=[RestoreUseOnUse("secondary", 1)])
         },
         "priority": [
             ("special", lambda character, targets: True),
             ("defensive",
              lambda character, targets: character.actions['secondary'].current_uses == 0),
             ("secondary", lambda character, targets:
-                character.actions['special'].current_cooldown >= (8 if character.selected_upgrades.get('special') == 'ruby'
-                                                                  else (6 if character.selected_upgrades.get('special') == 'opal'
-                                                                        else 4
-                                                                        )
-                                                                  ) or character.actions['special'].uses_counter()
+                character.actions['special'].current_cooldown >= sum(
+                    effect.reduction for effect in character.actions['secondary'].effects if isinstance(effect, ReduceCooldownOnUse)
+                ) + character.actions['secondary'].gcd()
              ),
             ("primary", lambda character, targets: True)
         ],
@@ -335,14 +336,19 @@ bunny_classes = {
         },
         "priority": [
             ("defensive", lambda character, targets: all(
-                not (isinstance(effect, AppliesBuffOnUse) and 
-                    effect.buff in [statuses.Warcry, statuses.RabbitLuck] and 
-                    character.has_status(effect.buff)) 
+                not (isinstance(effect, AppliesBuffOnUse) and
+                     effect.buff in [statuses.Warcry, statuses.RabbitLuck] and
+                     character.has_status(effect.buff))
                 for effect in character.actions['defensive'].effects)),
             ("special", lambda character, targets: True),
             ("primary", lambda character, targets:
-                character.actions['primary'].charges[0] > 0),
-            ("secondary", lambda character, targets: True)
+                character.selected_upgrades.get('primary') == 'opal' and not character.actions['special'].has_charges()),
+            ("secondary", lambda character, targets:
+                not character.actions['primary'].has_charges() and not character.actions['secondary'].has_charges()),
+            ("primary", lambda character, targets:
+                character.actions['primary'].base_damage_per_second() > character.actions['secondary'].base_damage_per_second()),
+            ("secondary", lambda character, targets:
+                character.actions['secondary'].base_damage_per_second() >= character.actions['primary'].base_damage_per_second()),
         ],
         "upgrades": {
             "primary": {
@@ -459,6 +465,154 @@ bunny_classes = {
                 "emerald": {
                     "defensive": {
                         "effects": [MultiplyDamage("ALL", Decimal('0.1'))]
+                    }
+                }
+            }
+        }
+    },
+    "wizard_bunny": {
+        "name": "Wizard Bunny",
+        "actions": {
+            "primary": Action("Dimi Moonburst", "primary", base_damage=200, base_cooldown=Decimal(0), base_gcd=Decimal('1.5'), num_hits=1),
+            "secondary": Action("Lat Moonburst", "secondary", base_damage=120, base_cooldown=Decimal(0), base_gcd=Decimal('1.2'), num_hits=1,
+                                effects=[ChargesAbilityOnHit("special", charge_amount=1, charge_level=Decimal('1.5'))]),
+            "special": Action("Astral Swirl", "special", base_damage=280, base_cooldown=Decimal(7), base_gcd=Decimal('1.2'), num_hits=1,
+                              effects=[CooldownResetByUse("special", ["primary"], probability=Decimal('0.3'))]),
+            "defensive": Action("Astral Seal", "defensive", base_damage=0, base_cooldown=Decimal(15), base_gcd=Decimal(0), num_hits=0,
+                                effects=[AppliesBuffOnUse("defensive", statuses.BuffingField, {'duration': Decimal(7), 'buff': statuses.Haste}, replace=True)])
+        },
+        "priority": [
+            ("defensive", lambda character, targets: True),
+            ("primary", lambda character, targets: 
+                character.actions['primary'].base_damage_per_second() > character.actions['special'].base_damage_per_second()),
+            ("secondary", lambda character, targets:
+                not character.actions['special'].has_charges()),
+            ("special", lambda character, targets: True),
+            ("secondary", lambda character, targets:
+                character.selected_upgrades.get('secondary') == 'emerald' and not character.actions['primary'].has_charges()),
+            ("primary", lambda character, targets: True),
+            ("secondary", lambda character, targets: True)
+        ],
+        "upgrades": {
+            "primary": {
+                "opal": {
+                    "primary": {
+                        "base_damage": 400,
+                        "base_cooldown": Decimal(4)
+                    }
+                },
+                "sapphire": {
+                    "primary": {
+                        "base_damage": 140,
+                        "base_gcd": Decimal('0.8')
+                    }
+                },
+                "ruby": {
+                    "primary": {
+                        "base_damage": 280
+                    }
+                },
+                "garnet": {
+                    "primary": {
+                        "effects": [AppliesBuffOnUse("primary", statuses.Warcry, {'duration': Decimal(5)}, probability=Decimal('0.3'))]
+                    }
+                },
+                "emerald": {
+                    "primary": {
+                        "base_damage": 220
+                    }
+                }
+            },
+            "secondary": {
+                "opal": {
+                    "secondary": {
+                        "base_damage": 0,
+                        "effects": [ChargesAbilityOnHit("special", charge_amount=1, charge_level=Decimal(2))]
+                    }
+                },
+                "sapphire": {
+                    "secondary": {
+                        "base_damage": 180,
+                        "base_cooldown": Decimal(8),
+                        "max_uses": 3,
+                        "effects_extend": [MultiplyDamage(["secondary"], Decimal('0.3'))] #Backstab is implemented as a .3 Multiply Damage effect as it always triggers on bosses
+                    }
+                },
+                "ruby": {
+                    "secondary": {
+                        "base_damage": 250,
+                        "base_cooldown": Decimal(5)
+                    }
+                },
+                "garnet": {
+                    "secondary": {
+                        "base_damage": 0,
+                        "base_cooldown": Decimal(3),
+                        "effects": [ChargesAndResetsAbilityOnUse("special", charge_level=Decimal(3), probability=Decimal('0.5'))]
+                    }
+                },
+                "emerald": {
+                    "secondary": {
+                        "effects_extend": [ChargesAbilityOnHit("primary", charge_amount=2, charge_level=Decimal('1.5'), max_charges=2)]
+                    }
+                }
+            },
+            "special": {
+                "opal": {
+                    "special": {
+                        "base_damage": 300,
+                        "base_cooldown": Decimal(4),
+                        "effects": []
+                    }
+                },
+                "sapphire": {
+                    "special": {
+                        "base_damage": 200,
+                        "num_hits": 2
+                    }
+                },
+                "ruby": {
+                    "special": {
+                        "effects_extend": [AppliesDebuffOnHit("Astral Swirl Burn", statuses.Burn, {'duration': Decimal(5)})]
+                    }
+                },
+                "garnet": {
+                    "special": {
+                        "effects": [CooldownResetByUse("special", ["primary"], probability=Decimal('0.5'))]
+                    }
+                },
+                "emerald": {
+                    "special": {
+                        "base_damage": 500,
+                        "base_cooldown": Decimal(99)
+                    }
+                }
+            },
+            "defensive": {
+                "opal": {
+                    "defensive": {
+                        "effects": [AppliesBuffOnUse("defensive", statuses.Haste, {'duration': Decimal(7)})]
+                    }
+                },
+                "sapphire": {
+                    "defensive": {
+                        "effects": [AppliesBuffOnUse("defensive", statuses.BuffingField, {'duration': Decimal(3), 'buff': statuses.Vanish}, replace=True)]
+                    }
+                },
+                "ruby": {
+                    "defensive": {
+                        "base_cooldown": Decimal(20),
+                        "effects": [AppliesBuffOnUse("defensive", statuses.BuffingField, {'duration': Decimal(20), 'buff': statuses.Haste}, replace=True)]    
+                    }
+                },
+                "garnet": {
+                    "defensive": {
+                        "effects": [CannotBeReset(), AppliesBuffOnUse("defensive", statuses.BuffingField, {'duration': Decimal(5), 'buff': statuses.RabbitLuck}, replace=True)]
+                    }
+                },
+                "emerald": {
+                    "defensive": {
+                        "effects": [MultiplyDamage("ALL", Decimal('0.2'))]
                     }
                 }
             }
