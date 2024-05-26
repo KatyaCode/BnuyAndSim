@@ -70,3 +70,4 @@ class Simulation:
         for key, average in final_averages.items():
             print(f"{key}: {average}")
         print(f"Total Average: {total_average}")
+        return total_average

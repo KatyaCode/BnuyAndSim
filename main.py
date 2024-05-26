@@ -1,31 +1,19 @@
 import wx
-import threading
 
-from modules import create_gui, Simulation, MainFrame
+from modules import Simulation, MainFrame
 
-def run(bunny_class, selected_upgrades, use_defensive, num_targets, simulation_time, num_simulations):
+def run(bunny_class, selected_upgrades, use_defensive, num_targets, simulation_time, num_simulations, callback=None):
     new_simulation = Simulation(bunny_class, selected_upgrades, use_defensive, num_targets, simulation_time, num_simulations)
-    new_simulation.run()
-
-
-def run_tkinter_gui():
-    root = create_gui(run)
-    root.mainloop()
+    result = new_simulation.run()
+    # Call the callback function if it was provided
+    if callback is not None:
+        wx.CallAfter(callback, result)
 
 def run_wxpython_gui():
     app = wx.App(False)
-    frame = MainFrame()
+    frame = MainFrame(run)
     frame.Show()
     app.MainLoop()
 
 if __name__ == "__main__":
-    # Run each GUI in a separate thread
-    tkinter_thread = threading.Thread(target=run_tkinter_gui)
-    wxpython_thread = threading.Thread(target=run_wxpython_gui)
-
-    tkinter_thread.start()
-    wxpython_thread.start()
-
-    # Wait for both threads to finish
-    tkinter_thread.join()
-    wxpython_thread.join()
+    run_wxpython_gui()
