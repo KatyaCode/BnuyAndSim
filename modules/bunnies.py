@@ -15,7 +15,7 @@ bunny_classes = {
                                 effects=[ReduceCooldownOnUse("special", 4)]),
             "special": Action("Abyssal Call", "special", base_damage=180, base_cooldown=Decimal(20), base_gcd=Decimal('1.2'), num_hits=4,
                               effects=[StartOnCooldown("special")]),
-            "defensive": Action("Protect Command", "defensive", base_damage=0, base_cooldown=Decimal(10), base_gcd=Decimal(0), num_hits=0,
+            "defensive": Action("Protect Command", "defensive", base_damage=0, base_cooldown=Decimal(10), base_gcd=Decimal(0), num_hits=1,
                                 effects=[RestoreUseOnUse("secondary", 1)])
         },
         "priority": [
@@ -27,6 +27,12 @@ bunny_classes = {
                     effect.reduction for effect in character.actions['secondary'].effects if isinstance(effect, ReduceCooldownOnUse)
                 ) + character.actions['secondary'].gcd()
              ),
+            ("secondary", lambda character, targets:
+                character.selected_upgrades.get('special') == 'garnet' and character.actions['special'].current_cooldown >= character.actions['secondary'].current_cooldown
+            ),
+            ("secondary", lambda character, targets:
+                character.actions['secondary'].current_uses == character.actions['secondary'].max_uses
+            ),
             ("primary", lambda character, targets: True)
         ],
         "upgrades": {
