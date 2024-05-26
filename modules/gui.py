@@ -17,16 +17,36 @@ class ConsoleRedirect:
         self.buffer += text
         self.line_count += text.count('\n')
 
-        # Update the wx.TextCtrl every 100 lines or every 0.1 seconds
-        if self.line_count >= 200 or time.time() - self.last_update >= 0.1:
-            wx.CallAfter(self.text_ctrl.AppendText, self.buffer)
+        # Update the wx.TextCtrl every 0.1 seconds
+        if time.time() - self.last_update >= 0.1:
+            if self.text_ctrl:
+                wx.CallAfter(self.text_ctrl.AppendText, self.buffer)
             self.buffer = ""
             self.line_count = 0
             self.last_update = time.time()
+            
+    def update_text_ctrl(self, text):
+        # Append the new text
+        current_text = self.text_ctrl.GetValue()
+        new_text = current_text + text
+
+        # Split the text into lines
+        lines = new_text.split('\n')
+
+        # Limit the number of lines
+        if len(lines) > 1000:
+            # Remove the oldest lines
+            lines = lines[-1000:]
+
+        # Update the text in the wx.TextCtrl
+        self.text_ctrl.Clear()
+        self.text_ctrl.AppendText('\n'.join(lines))
+
 
     def flush(self):
         if self.buffer:
-            wx.CallAfter(self.text_ctrl.AppendText, self.buffer)
+            if self.text_ctrl:
+                wx.CallAfter(self.text_ctrl.AppendText, self.buffer)
             self.buffer = ""
             self.line_count = 0
 
@@ -163,7 +183,7 @@ class MainFrame(wx.Frame):
 
         # Create the console output
         self.console = wx.TextCtrl(
-            panel, style=wx.TE_MULTILINE | wx.TE_READONLY)
+            panel, style=wx.TE_MULTILINE | wx.TE_READONLY )
         
         # Create the DPS display boxes
         current_run_box = wx.StaticBox(panel, label="Total Average DPS")

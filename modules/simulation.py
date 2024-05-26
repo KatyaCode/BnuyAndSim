@@ -14,13 +14,13 @@ class Simulation:
         self.simulation_time = Decimal(simulation_time)
         self.num_simulations = num_simulations
         self.current_simulation_time = CurrentSimulationTime.get_instance()
+        self.logger = CombatLogger.get_instance()
         self.time_step = Decimal('.1')
 
     def run(self):
         all_damage_averages = []
 
         for run in range(self.num_simulations):
-            self.logger = CombatLogger.get_instance()
             self.character = Character(
                 self.bunny_class, self.selected_upgrades, self.use_defensive)
             self.targets = [Target("Target {}".format(i+1))

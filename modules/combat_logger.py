@@ -113,6 +113,9 @@ class CombatLogger:
             {"time": self.current_simulation_time, "event": event})
         if self.level >= self.LEVELS[event_level]:
             print(f"{self.current_simulation_time}: {event}")
+            
+    def clear(self):
+        self.logs = []
 
     def get_logs(self):
         return self.logs
